@@ -5,6 +5,7 @@ app.use(express.json());
 
 // 🔴 請填入您的 Channel Access Token
 const CHANNEL_ACCESS_TOKEN = 'Z1XcJNaA9vsbgUGPw3fFBRENS220e9oJjOzbIiWzxj7WC5EgPh5XPWOGW5ZiII6fz/F03f87r82nNeluYXqggr4E5ll6NIUbKFDPH8vovltUczcWvi0vQNvatLLnklBqRpCyKu4xrtyial2LbCWnhgdB04t89/1O/w1cDnyilFU=';
+
 // 讀取題庫檔案
 const questionsData = JSON.parse(fs.readFileSync('./questions.json', 'utf-8'));
 
@@ -248,4 +249,38 @@ app.post('/webhook', async (req, res) => {
                         state.currentPool = getRandomQuestions(questionsData[nextStageKey], 3);
                         const nextQ = state.currentPool[0];
                         await sendLineMessage(replyToken, [
-                            { type: 'text', text
+                            { type: 'text', text: `✅ 正確！晉級到第 ${state.stage} 幕 (${nextStageKey}區)！` },
+                            createQuestionFlex(state.stage, nextQ)
+                        ]);
+                    }
+                } 
+                // 答錯邏輯
+                else {
+                    state.wrongCount++;
+                    if (state.wrongCount >= 3) {
+                        delete userStates[userId];
+                        await sendLineMessage(replyToken, "💀 挑戰失敗！三題全錯，被傳送回原點。\n\n點選「遊戲開始」重新挑戰！");
+                    } else {
+                        state.questionIndex++;
+                        const nextQ = state.currentPool[state.questionIndex];
+                        await sendLineMessage(replyToken, [
+                            { type: 'text', text: `❌ 答錯了 (目前 ${state.wrongCount}/3 錯)\n別氣餒，換下一題試試看：` },
+                            createQuestionFlex(state.stage, nextQ)
+                        ]);
+                    }
+                }
+            } else {
+                // 非作答狀態下的閒聊
+                if (state) {
+                    await sendLineMessage(replyToken, "💡 遊戲進行中，請點擊題目卡片的按鈕喔！如果要中斷，請點選「遊戲開始」。");
+                } else {
+                    await sendLineMessage(replyToken, "👋 您好！請點擊下方的圖文選單來開始您的推拿知識測驗！");
+                }
+            }
+        }
+    }
+    res.status(200).send('OK');
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
