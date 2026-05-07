@@ -5,6 +5,7 @@ app.use(express.json());
 
 // 🔴 請填入你的 Channel Access Token
 const CHANNEL_ACCESS_TOKEN = 'Z1XcJNaA9vsbgUGPw3fFBRENS220e9oJjOzbIiWzxj7WC5EgPh5XPWOGW5ZiII6fz/F03f87r82nNeluYXqggr4E5ll6NIUbKFDPH8vovltUczcWvi0vQNvatLLnklBqRpCyKu4xrtyial2LbCWnhgdB04t89/1O/w1cDnyilFU=';
+
 // 讀取題庫檔案
 const questionsData = JSON.parse(fs.readFileSync('./questions.json', 'utf-8'));
 
@@ -154,7 +155,74 @@ function createQuestionFlex(stage, qData) {
     };
 }
 
-// Webhook 入口
+// ==========================================
+// 🌟 圖文選單 (Rich Menu) 自動建立 API
+// ==========================================
+app.get('/setup-menu', async (req, res) => {
+    try {
+        // 1. 設定圖文選單結構 (對應 1200x810 圖片)
+        const menuConfig = {
+            size: { width: 1200, height: 810 }, // 大型選單尺寸
+            selected: true,
+            name: "遊戲主選單",
+            chatBarText: "選單",
+            areas: [
+                {
+                    // 右上半部區域：遊戲開始
+                    bounds: { x: 600, y: 0, width: 600, height: 405 },
+                    action: { type: "message", text: "遊戲開始" }
+                },
+                {
+                    // 右下半部區域：題庫練習
+                    bounds: { x: 600, y: 405, width: 600, height: 405 },
+                    action: { type: "message", text: "題庫練習" }
+                }
+            ]
+        };
+
+        const res1 = await fetch('https://api.line.me/v2/bot/richmenu', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}`
+            },
+            body: JSON.stringify(menuConfig)
+        });
+        const data1 = await res1.json();
+        const richMenuId = data1.richMenuId;
+        
+        if (!richMenuId) {
+            return res.send(`❌ 建立選單失敗：${JSON.stringify(data1)}`);
+        }
+
+        // 2. 上傳 menu.jpg
+        const imageBuffer = fs.readFileSync('./menu.jpg');
+        const res2 = await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'image/jpeg',
+                'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}`
+            },
+            body: imageBuffer
+        });
+
+        // 3. 綁定給所有用戶
+        const res3 = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${richMenuId}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}`
+            }
+        });
+
+        res.send(`<h1>✅ 圖文選單設定成功！</h1><p>RichMenu ID: ${richMenuId}</p><p>請打開手機的 LINE 確認看看！</p>`);
+    } catch (error) {
+        res.send(`<h1>❌ 發生錯誤</h1><p>${error.toString()}</p><p>請確認你的 GitHub 裡面有沒有上傳 menu.jpg 檔案！</p>`);
+    }
+});
+
+// ==========================================
+// 🌟 遊戲主邏輯 Webhook
+// ==========================================
 app.post('/webhook', async (req, res) => {
     const events = req.body.events;
 
@@ -171,7 +239,6 @@ app.post('/webhook', async (req, res) => {
                     const state = userStates[userId];
                     const firstQ = state.currentPool[0];
                     
-                    // 同時發送純文字歡迎語氣與精美的 Flex 題目卡片
                     await sendLineMessage(replyToken, [
                         { type: 'text', text: '🎮 遊戲開始！請點擊下方按鈕作答：' },
                         createQuestionFlex(state.stage, firstQ)
@@ -179,9 +246,9 @@ app.post('/webhook', async (req, res) => {
                     continue;
                 }
 
-                // 🌟 指令：查看題目
-                if (userMessage === '查看題目') {
-                    const replyText = "📚 提示：遊戲共有五幕，每幕會抽出 3 題。\n只要答對 1 題即可晉級下一幕！\n若 3 題全錯，就會退回起點重新開始喔。\n\n輸入「遊戲開始」立刻挑戰！";
+                // 🌟 指令：題庫練習 (對應圖片下方的按鈕)
+                if (userMessage === '題庫練習') {
+                    const replyText = "📚 提示：遊戲共有五幕，每幕會抽出 3 題。\n只要答對 1 題即可晉級下一幕！\n若 3 題全錯，就會退回起點重新開始喔。\n\n點擊選單上的「遊戲開始」立刻挑戰！";
                     await sendLineMessage(replyToken, replyText);
                     continue;
                 }
@@ -192,13 +259,12 @@ app.post('/webhook', async (req, res) => {
                 if (state && ['a', 'b', 'c', 'd'].includes(userMessage)) {
                     const currentQ = state.currentPool[state.questionIndex];
                     
-                    // 答對邏輯
                     if (userMessage === currentQ.answer) {
                         state.stage++; 
                         
                         if (state.stage > 5) {
                             delete userStates[userId]; 
-                            await sendLineMessage(replyToken, "🎊 恭喜你！！\n你已經突破了所有的五幕關卡，完全通關！\n\n如果想再玩一次，請隨時輸入「遊戲開始」。");
+                            await sendLineMessage(replyToken, "🎊 恭喜你！！\n你已經突破了所有的五幕關卡，完全通關！\n\n如果想再玩一次，請點擊「遊戲開始」。");
                         } else {
                             state.wrongCount = 0;
                             state.questionIndex = 0;
@@ -210,14 +276,12 @@ app.post('/webhook', async (req, res) => {
                                 createQuestionFlex(state.stage, nextQ)
                             ]);
                         }
-                    } 
-                    // 答錯邏輯
-                    else {
+                    } else {
                         state.wrongCount++;
                         
                         if (state.wrongCount >= 3) {
                             delete userStates[userId]; 
-                            await sendLineMessage(replyToken, "💀 挑戰失敗...\n你已經在這幕答錯 3 題了，被傳送回原點。\n\n請輸入「遊戲開始」重新挑戰！");
+                            await sendLineMessage(replyToken, "💀 挑戰失敗...\n你已經在這幕答錯 3 題了，被傳送回原點。\n\n請點擊選單的「遊戲開始」重新挑戰！");
                         } else {
                             state.questionIndex++;
                             const nextQ = state.currentPool[state.questionIndex];
@@ -229,9 +293,10 @@ app.post('/webhook', async (req, res) => {
                     }
                 } else {
                     if (state) {
-                        await sendLineMessage(replyToken, "💡 遊戲進行中喔！\n請直接點擊上方卡片的按鈕來作答。\n如果要放棄當前遊戲，可以輸入「遊戲開始」重來。");
+                        await sendLineMessage(replyToken, "💡 遊戲進行中喔！\n請直接點擊上方卡片的按鈕來作答。\n如果要放棄當前遊戲，可以點選「遊戲開始」重來。");
                     } else {
-                        await sendLineMessage(replyToken, "👋 你好！\n請輸入「遊戲開始」來挑戰五幕問答。\n輸入「查看題目」了解規則。");
+                        // 閒聊防呆
+                        await sendLineMessage(replyToken, "👋 你好！請直接點擊下方的圖文選單來互動喔！");
                     }
                 }
             }
