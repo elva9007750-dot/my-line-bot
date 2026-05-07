@@ -23,7 +23,6 @@ function loadQuestions() {
 loadQuestions();
 
 const userStates = {};
-const stageMap = { 1: "1", 2: "2", 3: "3" };
 
 function getRandomItems(array, n) {
     if (!Array.isArray(array) || array.length === 0) return [];
@@ -77,13 +76,19 @@ function createQuestionFlex(stage, qData, qIndex, correct, wrong) {
     };
 }
 
-// 提供失敗圖片的存取路徑
+// ==========================================
+// 🌟 提供圖片檔案存取路徑
+// ==========================================
+// 失敗圖片
 app.get('/failure.jpg', (req, res) => {
-    if (fs.existsSync('./failure.jpg')) {
-        res.sendFile(__dirname + '/failure.jpg');
-    } else {
-        res.status(404).send('Not Found');
-    }
+    if (fs.existsSync('./failure.jpg')) res.sendFile(__dirname + '/failure.jpg');
+    else res.status(404).send('Not Found');
+});
+
+// 成功圖片
+app.get('/success.jpg', (req, res) => {
+    if (fs.existsSync('./success.jpg')) res.sendFile(__dirname + '/success.jpg');
+    else res.status(404).send('Not Found');
 });
 
 // 題庫瀏覽網頁
@@ -103,6 +108,7 @@ app.get('/view-questions', (req, res) => {
     res.send(html);
 });
 
+// Webhook
 app.post('/webhook', async (req, res) => {
     const events = req.body.events;
     if (!events) return res.status(200).send('OK');
@@ -132,14 +138,14 @@ app.post('/webhook', async (req, res) => {
                     const isCorrect = userMessage === currentQ.answer;
                     if (isCorrect) state.correctCount++; else state.wrongCount++;
                     
-                    // 🌟 失敗邏輯：答錯 3 題時
+                    // 🌟 失敗邏輯：答錯 3 題
                     if (state.wrongCount >= 3) {
                         delete userStates[userId];
                         await sendLineMessage(replyToken, [
                             { type: 'text', text: `💀 挑戰失敗！你在本幕已經答錯 3 題了，被傳送回原點。` },
                             {
                                 type: 'image',
-                                originalContentUrl: `${BASE_URL}/failure.jpg`, // 讀取你專案內的 failure.jpg
+                                originalContentUrl: `${BASE_URL}/failure.jpg`,
                                 previewImageUrl: `${BASE_URL}/failure.jpg`
                             }
                         ]);
@@ -148,9 +154,17 @@ app.post('/webhook', async (req, res) => {
                         if (state.questionIndex >= 5) {
                             if (state.correctCount >= 3) {
                                 state.stage++;
+                                // 🌟 成功通關邏輯：通過全部三幕
                                 if (state.stage > 3) {
                                     delete userStates[userId];
-                                    await sendLineMessage(replyToken, "🎊 恭喜通關全三幕！");
+                                    await sendLineMessage(replyToken, [
+                                        { type: 'text', text: "🎊 太厲害了！你已成功通關全三幕，成為整復推拿達人！" },
+                                        {
+                                            type: 'image',
+                                            originalContentUrl: `${BASE_URL}/success.jpg`, // 讀取你專案內的 success.jpg
+                                            previewImageUrl: `${BASE_URL}/success.jpg`
+                                        }
+                                    ]);
                                 } else {
                                     state.currentPool = getRandomItems(questionsData[state.stage.toString()], 5);
                                     state.questionIndex = 0; state.correctCount = 0; state.wrongCount = 0;
