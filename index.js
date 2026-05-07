@@ -17,9 +17,8 @@ function getRandomQuestions(array, num) {
     return shuffled.slice(0, num);
 }
 
-// 發送 LINE 訊息的通用輔助函式 (支援純文字與多媒體訊息)
+// 發送 LINE 訊息的通用輔助函式
 async function sendLineMessage(replyToken, messageContent) {
-    // 判斷傳入的是字串(純文字)還是陣列(Flex Message 等複雜格式)
     const messagesArray = Array.isArray(messageContent) 
         ? messageContent 
         : [{ type: 'text', text: messageContent }];
@@ -48,6 +47,113 @@ function initUserState(userId) {
     };
 }
 
+// 🌟 動態產生測驗 Flex Message 卡片的函式
+function createQuestionFlex(stage, qData) {
+    return {
+        type: "flex",
+        altText: `【第 ${stage} 幕】測驗題目：${qData.question}`,
+        contents: {
+            "type": "bubble",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": `【第 ${stage} 幕】測驗題目`,
+                        "weight": "bold",
+                        "color": "#1DB446",
+                        "size": "sm"
+                    },
+                    {
+                        "type": "text",
+                        "text": qData.question,
+                        "weight": "bold",
+                        "size": "xl",
+                        "margin": "md",
+                        "wrap": true
+                    },
+                    {
+                        "type": "separator",
+                        "margin": "xxl"
+                    },
+                    {
+                        "type": "box",
+                        "layout": "vertical",
+                        "margin": "xxl",
+                        "spacing": "sm",
+                        "contents": [
+                            {
+                                "type": "box",
+                                "layout": "horizontal",
+                                "spacing": "sm",
+                                "contents": [
+                                    {
+                                        "type": "button",
+                                        "style": "secondary",
+                                        "height": "sm",
+                                        "action": {
+                                            "type": "message",
+                                            "label": `A. ${qData.options.a}`,
+                                            "text": "a"
+                                        },
+                                        "color": "#F0F0F0"
+                                    },
+                                    {
+                                        "type": "button",
+                                        "style": "secondary",
+                                        "height": "sm",
+                                        "action": {
+                                            "type": "message",
+                                            "label": `B. ${qData.options.b}`,
+                                            "text": "b"
+                                        },
+                                        "color": "#F0F0F0"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "box",
+                                "layout": "horizontal",
+                                "spacing": "sm",
+                                "contents": [
+                                    {
+                                        "type": "button",
+                                        "style": "secondary",
+                                        "height": "sm",
+                                        "action": {
+                                            "type": "message",
+                                            "label": `C. ${qData.options.c}`,
+                                            "text": "c"
+                                        },
+                                        "color": "#F0F0F0"
+                                    },
+                                    {
+                                        "type": "button",
+                                        "style": "secondary",
+                                        "height": "sm",
+                                        "action": {
+                                            "type": "message",
+                                            "label": `D. ${qData.options.d}`,
+                                            "text": "d"
+                                        },
+                                        "color": "#F0F0F0"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "styles": {
+                "footer": {
+                    "separator": true
+                }
+            }
+        }
+    };
+}
+
 // Webhook 入口
 app.post('/webhook', async (req, res) => {
     const events = req.body.events;
@@ -59,90 +165,23 @@ app.post('/webhook', async (req, res) => {
                 const userMessage = event.message.text.trim().toLowerCase();
                 const replyToken = event.replyToken;
 
-                // 🌟 新增功能：測試 Flex Message 餐廳卡片
-                if (userMessage === '查看餐廳') {
-                    const flexMessage = {
-                        type: "flex",
-                        altText: "Brown Cafe 詳細資訊",
-                        contents: {
-                            "type": "bubble",
-                            "hero": {
-                                "type": "image",
-                                "url": "https://developers-resource.landpress.line.me/fx/img/01_1_cafe.png",
-                                "size": "full",
-                                "aspectRatio": "20:13",
-                                "aspectMode": "cover",
-                                "action": { "type": "uri", "uri": "https://line.me/" }
-                            },
-                            "body": {
-                                "type": "box",
-                                "layout": "vertical",
-                                "contents": [
-                                    { "type": "text", "text": "Brown Cafe", "weight": "bold", "size": "xl" },
-                                    {
-                                        "type": "box", "layout": "baseline", "margin": "md",
-                                        "contents": [
-                                            { "type": "icon", "size": "sm", "url": "https://developers-resource.landpress.line.me/fx/img/review_gold_star_28.png" },
-                                            { "type": "icon", "size": "sm", "url": "https://developers-resource.landpress.line.me/fx/img/review_gold_star_28.png" },
-                                            { "type": "icon", "size": "sm", "url": "https://developers-resource.landpress.line.me/fx/img/review_gold_star_28.png" },
-                                            { "type": "icon", "size": "sm", "url": "https://developers-resource.landpress.line.me/fx/img/review_gold_star_28.png" },
-                                            { "type": "icon", "size": "sm", "url": "https://developers-resource.landpress.line.me/fx/img/review_gray_star_28.png" },
-                                            { "type": "text", "text": "4.0", "size": "sm", "color": "#999999", "margin": "md", "flex": 0 }
-                                        ]
-                                    },
-                                    {
-                                        "type": "box", "layout": "vertical", "margin": "lg", "spacing": "sm",
-                                        "contents": [
-                                            {
-                                                "type": "box", "layout": "baseline", "spacing": "sm",
-                                                "contents": [
-                                                    { "type": "text", "text": "Place", "color": "#aaaaaa", "size": "sm", "flex": 1 },
-                                                    { "type": "text", "text": "Flex Tower, 7-7-4 Midori-ku, Tokyo", "wrap": true, "color": "#666666", "size": "sm", "flex": 5 }
-                                                ]
-                                            },
-                                            {
-                                                "type": "box", "layout": "baseline", "spacing": "sm",
-                                                "contents": [
-                                                    { "type": "text", "text": "Time", "color": "#aaaaaa", "size": "sm", "flex": 1 },
-                                                    { "type": "text", "text": "10:00 - 23:00", "wrap": true, "color": "#666666", "size": "sm", "flex": 5 }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            },
-                            "footer": {
-                                "type": "box", "layout": "vertical", "spacing": "sm",
-                                "contents": [
-                                    { "type": "button", "style": "link", "height": "sm", "action": { "type": "uri", "label": "CALL", "uri": "https://line.me/" } },
-                                    { "type": "button", "style": "link", "height": "sm", "action": { "type": "uri", "label": "WEBSITE", "uri": "https://line.me/" } },
-                                    { "type": "box", "layout": "vertical", "contents": [], "margin": "sm" },
-                                    { "type": "button", "action": { "type": "uri", "label": "action", "uri": "http://linecorp.com/" } },
-                                    { "type": "button", "action": { "type": "uri", "label": "action", "uri": "http://linecorp.com/" } }
-                                ],
-                                "flex": 0
-                            }
-                        }
-                    };
-                    
-                    // 發送陣列格式的 Flex Message
-                    await sendLineMessage(replyToken, [flexMessage]);
-                    continue;
-                }
-
                 // 🌟 指令：遊戲開始
                 if (userMessage === '遊戲開始') {
                     initUserState(userId);
                     const state = userStates[userId];
                     const firstQ = state.currentPool[0];
-                    const replyText = `🎮 遊戲開始！\n\n【第 1 幕】\n${firstQ.question}\n\nA. ${firstQ.options.a}\nB. ${firstQ.options.b}\nC. ${firstQ.options.c}\nD. ${firstQ.options.d}\n\n👉 請直接輸入 A, B, C 或 D 作答！`;
-                    await sendLineMessage(replyToken, replyText);
+                    
+                    // 同時發送純文字歡迎語氣與精美的 Flex 題目卡片
+                    await sendLineMessage(replyToken, [
+                        { type: 'text', text: '🎮 遊戲開始！請點擊下方按鈕作答：' },
+                        createQuestionFlex(state.stage, firstQ)
+                    ]);
                     continue;
                 }
 
                 // 🌟 指令：查看題目
                 if (userMessage === '查看題目') {
-                    const replyText = "📚 提示：遊戲共有五幕，每幕會抽出 3 題。\n只要答對 1 題即可晉級下一幕！\n若 3 題全錯，就會退回起點重新開始喔。\n\n輸入「遊戲開始」挑戰，或輸入「查看餐廳」看精美卡片！";
+                    const replyText = "📚 提示：遊戲共有五幕，每幕會抽出 3 題。\n只要答對 1 題即可晉級下一幕！\n若 3 題全錯，就會退回起點重新開始喔。\n\n輸入「遊戲開始」立刻挑戰！";
                     await sendLineMessage(replyToken, replyText);
                     continue;
                 }
@@ -153,6 +192,7 @@ app.post('/webhook', async (req, res) => {
                 if (state && ['a', 'b', 'c', 'd'].includes(userMessage)) {
                     const currentQ = state.currentPool[state.questionIndex];
                     
+                    // 答對邏輯
                     if (userMessage === currentQ.answer) {
                         state.stage++; 
                         
@@ -165,10 +205,14 @@ app.post('/webhook', async (req, res) => {
                             state.currentPool = getRandomQuestions(questionsData[state.stage.toString()], 3);
                             
                             const nextQ = state.currentPool[0];
-                            const replyText = `✅ 答對了！成功晉級！\n\n【第 ${state.stage} 幕】開始！\n${nextQ.question}\n\nA. ${nextQ.options.a}\nB. ${nextQ.options.b}\nC. ${nextQ.options.c}\nD. ${nextQ.options.d}\n\n👉 請作答：`;
-                            await sendLineMessage(replyToken, replyText);
+                            await sendLineMessage(replyToken, [
+                                { type: 'text', text: `✅ 答對了！成功晉級到第 ${state.stage} 幕！` },
+                                createQuestionFlex(state.stage, nextQ)
+                            ]);
                         }
-                    } else {
+                    } 
+                    // 答錯邏輯
+                    else {
                         state.wrongCount++;
                         
                         if (state.wrongCount >= 3) {
@@ -177,15 +221,17 @@ app.post('/webhook', async (req, res) => {
                         } else {
                             state.questionIndex++;
                             const nextQ = state.currentPool[state.questionIndex];
-                            const replyText = `❌ 答錯了！\n(目前錯誤：${state.wrongCount}/3)\n\n別氣餒，同一幕的下一題：\n${nextQ.question}\n\nA. ${nextQ.options.a}\nB. ${nextQ.options.b}\nC. ${nextQ.options.c}\nD. ${nextQ.options.d}\n\n👉 請作答：`;
-                            await sendLineMessage(replyToken, replyText);
+                            await sendLineMessage(replyToken, [
+                                { type: 'text', text: `❌ 答錯了！\n(目前錯誤：${state.wrongCount}/3)\n別氣餒，繼續挑戰同一幕的下一題：` },
+                                createQuestionFlex(state.stage, nextQ)
+                            ]);
                         }
                     }
                 } else {
                     if (state) {
-                        await sendLineMessage(replyToken, "💡 遊戲進行中喔！\n請直接輸入 A, B, C 或 D 來回答問題。\n如果要放棄當前遊戲，可以輸入「遊戲開始」重來。");
+                        await sendLineMessage(replyToken, "💡 遊戲進行中喔！\n請直接點擊上方卡片的按鈕來作答。\n如果要放棄當前遊戲，可以輸入「遊戲開始」重來。");
                     } else {
-                        await sendLineMessage(replyToken, "👋 你好！\n請輸入「遊戲開始」來挑戰五幕問答。\n輸入「查看題目」了解規則。\n輸入「查看餐廳」來測試 Flex 卡片！");
+                        await sendLineMessage(replyToken, "👋 你好！\n請輸入「遊戲開始」來挑戰五幕問答。\n輸入「查看題目」了解規則。");
                     }
                 }
             }
