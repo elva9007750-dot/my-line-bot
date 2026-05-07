@@ -6,13 +6,13 @@ app.use(express.json());
 // 🔴 請填入您的 Channel Access Token
 const CHANNEL_ACCESS_TOKEN = 'Z1XcJNaA9vsbgUGPw3fFBRENS220e9oJjOzbIiWzxj7WC5EgPh5XPWOGW5ZiII6fz/F03f87r82nNeluYXqggr4E5ll6NIUbKFDPH8vovltUczcWvi0vQNvatLLnklBqRpCyKu4xrtyial2LbCWnhgdB04t89/1O/w1cDnyilFU=';
 
-// 讀取題庫檔案
+// 讀取題庫檔案 (questions.json)
 const questionsData = JSON.parse(fs.readFileSync('./questions.json', 'utf-8'));
 
-// 區域對照表：將遊戲階段數字轉換為題庫的 A-E 區
+// 區域對照表
 const stageMap = { 1: "A", 2: "B", 3: "C", 4: "D", 5: "E" };
 
-// 儲存所有玩家的遊戲狀態 (存在記憶體中)
+// 儲存所有玩家的遊戲狀態
 const userStates = {};
 
 // 隨機抽題的輔助函式
@@ -35,27 +35,14 @@ async function sendLineMessage(replyToken, messageContent) {
         },
         body: JSON.stringify({
             replyToken: replyToken,
-            messages: messagesArray
+            messages: messagesArray.slice(0, 5) // LINE 限制一次回覆最多 5 則訊息
         })
     });
 }
 
-// 建立或取得特定玩家的狀態
-function initUserState(userId) {
-    // 遊戲開始，從第一幕 (A區) 抽題
-    const stageKey = stageMap[1]; // "A"
-    const stageQuestions = getRandomQuestions(questionsData[stageKey], 3);
-    userStates[userId] = {
-        stage: 1,           // 當前幕數 (1-5)
-        wrongCount: 0,      // 當前幕累計錯誤
-        currentPool: stageQuestions, // 本幕抽出的 3 題
-        questionIndex: 0    // 當前回答到第幾題
-    };
-}
-
 // 🌟 動態產生測驗 Flex Message 卡片
 function createQuestionFlex(stage, qData) {
-    const stageLabel = stageMap[stage]; // A, B, C, D, E
+    const stageLabel = stageMap[stage];
     return {
         type: "flex",
         altText: `【第 ${stage} 幕】測驗題目`,
@@ -80,10 +67,7 @@ function createQuestionFlex(stage, qData) {
                         "margin": "md",
                         "wrap": true
                     },
-                    {
-                        "type": "separator",
-                        "margin": "xxl"
-                    },
+                    { "type": "separator", "margin": "xxl" },
                     {
                         "type": "box",
                         "layout": "vertical",
@@ -95,20 +79,8 @@ function createQuestionFlex(stage, qData) {
                                 "layout": "horizontal",
                                 "spacing": "sm",
                                 "contents": [
-                                    {
-                                        "type": "button",
-                                        "style": "secondary",
-                                        "height": "sm",
-                                        "action": { "type": "message", "label": `A. ${qData.options.a}`, "text": "a" },
-                                        "color": "#F0F0F0"
-                                    },
-                                    {
-                                        "type": "button",
-                                        "style": "secondary",
-                                        "height": "sm",
-                                        "action": { "type": "message", "label": `B. ${qData.options.b}`, "text": "b" },
-                                        "color": "#F0F0F0"
-                                    }
+                                    { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "message", "label": `A. ${qData.options.a}`, "text": "a" }, "color": "#F0F0F0" },
+                                    { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "message", "label": `B. ${qData.options.b}`, "text": "b" }, "color": "#F0F0F0" }
                                 ]
                             },
                             {
@@ -116,20 +88,8 @@ function createQuestionFlex(stage, qData) {
                                 "layout": "horizontal",
                                 "spacing": "sm",
                                 "contents": [
-                                    {
-                                        "type": "button",
-                                        "style": "secondary",
-                                        "height": "sm",
-                                        "action": { "type": "message", "label": `C. ${qData.options.c}`, "text": "c" },
-                                        "color": "#F0F0F0"
-                                    },
-                                    {
-                                        "type": "button",
-                                        "style": "secondary",
-                                        "height": "sm",
-                                        "action": { "type": "message", "label": `D. ${qData.options.d}`, "text": "d" },
-                                        "color": "#F0F0F0"
-                                    }
+                                    { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "message", "label": `C. ${qData.options.c}`, "text": "c" }, "color": "#F0F0F0" },
+                                    { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "message", "label": `D. ${qData.options.d}`, "text": "d" }, "color": "#F0F0F0" }
                                 ]
                             }
                         ]
@@ -158,27 +118,24 @@ app.get('/setup-menu', async (req, res) => {
                     action: { type: "message", text: "遊戲開始" }
                 },
                 {
-                    // 右下半部：題庫練習
+                    // 右下半部：查看題庫
                     bounds: { x: 600, y: 405, width: 600, height: 405 },
-                    action: { type: "message", text: "題庫練習" }
+                    action: { type: "message", text: "查看題庫" }
                 }
             ]
         };
 
-        const res1 = await fetch('https://api.line.me/v2/bot/richmenu', {
+        const response = await fetch('https://api.line.me/v2/bot/richmenu', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}`
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` },
             body: JSON.stringify(menuConfig)
         });
-        const data1 = await res1.json();
-        const richMenuId = data1.richMenuId;
+        const data = await response.json();
+        const richMenuId = data.richMenuId;
         
-        if (!richMenuId) return res.send(`❌ 失敗：${JSON.stringify(data1)}`);
+        if (!richMenuId) return res.send(`❌ 建立選單失敗：${JSON.stringify(data)}`);
 
-        // 上傳圖片 (確保 menu.jpg 存在)
+        // 上傳 menu.jpg (請確保圖片尺寸為 1200x810)
         const imageBuffer = fs.readFileSync('./menu.jpg');
         await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, {
             method: 'POST',
@@ -186,13 +143,13 @@ app.get('/setup-menu', async (req, res) => {
             body: imageBuffer
         });
 
-        // 設為預設
+        // 設為所有人的預設選單
         await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${richMenuId}`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
         });
 
-        res.send(`<h1>✅ 成功！</h1><p>選單 ID: ${richMenuId}</p>`);
+        res.send(`<h1>✅ 圖文選單設定成功！</h1><p>RichMenu ID: ${richMenuId}</p>`);
     } catch (error) {
         res.send(`<h1>❌ 錯誤</h1><p>${error.message}</p>`);
     }
@@ -211,70 +168,80 @@ app.post('/webhook', async (req, res) => {
             const userMessage = event.message.text.trim().toLowerCase();
             const replyToken = event.replyToken;
 
-            // 1. 處理：遊戲開始
+            // 1. 功能：遊戲開始
             if (userMessage === '遊戲開始') {
-                initUserState(userId);
-                const state = userStates[userId];
-                const firstQ = state.currentPool[0];
+                const stageKey = stageMap[1];
+                const stageQuestions = getRandomQuestions(questionsData[stageKey], 3);
+                userStates[userId] = {
+                    stage: 1,
+                    wrongCount: 0,
+                    currentPool: stageQuestions,
+                    questionIndex: 0
+                };
+                const firstQ = stageQuestions[0];
                 await sendLineMessage(replyToken, [
-                    { type: 'text', text: '🎮 挑戰開始！請觀察題目後點擊下方選項：' },
-                    createQuestionFlex(state.stage, firstQ)
+                    { type: 'text', text: '🎮 挑戰開始！請觀察題目後點擊下方選項作答：' },
+                    createQuestionFlex(1, firstQ)
                 ]);
                 continue;
             }
 
-            // 2. 處理：題庫練習 (顯示規則)
-            if (userMessage === '題庫練習') {
-                const ruleText = "📚 【闖關規則】\n1. 共 A-E 五個區域，每區隨機抽 3 題。\n2. 只要答對 1 題即晉級下一幕。\n3. 若三題全錯，則退回起點重新挑戰。\n\n點選「遊戲開始」即可進行練習！";
-                await sendLineMessage(replyToken, ruleText);
+            // 2. 🌟 功能：查看題庫 (一次發送所有區域題目與答案)
+            if (userMessage === '查看題庫') {
+                const messages = [];
+                const zones = ["A", "B", "C", "D", "E"];
+                
+                zones.forEach(zone => {
+                    let zoneText = `📚 【${zone} 區題庫與解答】\n\n`;
+                    questionsData[zone].forEach((q, idx) => {
+                        const correctText = q.options[q.answer];
+                        zoneText += `Q${idx + 1}: ${q.question}\n✅ 答案: (${q.answer.toUpperCase()}) ${correctText}\n\n`;
+                    });
+                    messages.push({ type: 'text', text: zoneText.trim() });
+                });
+
+                await sendLineMessage(replyToken, messages);
                 continue;
             }
 
-            // 3. 處理：作答判定
+            // 3. 功能：作答判定
             const state = userStates[userId];
             if (state && ['a', 'b', 'c', 'd'].includes(userMessage)) {
                 const currentQ = state.currentPool[state.questionIndex];
                 
-                // 答對邏輯
                 if (userMessage === currentQ.answer) {
                     state.stage++;
                     if (state.stage > 5) {
                         delete userStates[userId];
-                        await sendLineMessage(replyToken, "🎊 恭喜！你已通過全五幕測驗，成為整復推拿達人！\n\n點選選單可重新開始挑戰。");
+                        await sendLineMessage(replyToken, "🎊 恭喜！您已通過全五幕測驗，成為專業達人！\n\n點選選單「遊戲開始」可再次挑戰。");
                     } else {
-                        // 晉級下一幕
                         state.wrongCount = 0;
                         state.questionIndex = 0;
-                        const nextStageKey = stageMap[state.stage];
-                        state.currentPool = getRandomQuestions(questionsData[nextStageKey], 3);
+                        const nextKey = stageMap[state.stage];
+                        state.currentPool = getRandomQuestions(questionsData[nextKey], 3);
                         const nextQ = state.currentPool[0];
                         await sendLineMessage(replyToken, [
-                            { type: 'text', text: `✅ 正確！晉級到第 ${state.stage} 幕 (${nextStageKey}區)！` },
+                            { type: 'text', text: `✅ 正確！晉級到第 ${state.stage} 幕 (${nextKey}區)！` },
                             createQuestionFlex(state.stage, nextQ)
                         ]);
                     }
-                } 
-                // 答錯邏輯
-                else {
+                } else {
                     state.wrongCount++;
                     if (state.wrongCount >= 3) {
                         delete userStates[userId];
-                        await sendLineMessage(replyToken, "💀 挑戰失敗！三題全錯，被傳送回原點。\n\n點選「遊戲開始」重新挑戰！");
+                        await sendLineMessage(replyToken, "💀 挑戰失敗！本幕三題全錯，已退回起點。\n\n點選「遊戲開始」重新挑戰！");
                     } else {
                         state.questionIndex++;
                         const nextQ = state.currentPool[state.questionIndex];
                         await sendLineMessage(replyToken, [
-                            { type: 'text', text: `❌ 答錯了 (目前 ${state.wrongCount}/3 錯)\n別氣餒，換下一題試試看：` },
+                            { type: 'text', text: `❌ 答錯了 (本幕已錯 ${state.wrongCount}/3 次)。請嘗試下一題：` },
                             createQuestionFlex(state.stage, nextQ)
                         ]);
                     }
                 }
             } else {
-                // 非作答狀態下的閒聊
-                if (state) {
-                    await sendLineMessage(replyToken, "💡 遊戲進行中，請點擊題目卡片的按鈕喔！如果要中斷，請點選「遊戲開始」。");
-                } else {
-                    await sendLineMessage(replyToken, "👋 您好！請點擊下方的圖文選單來開始您的推拿知識測驗！");
+                if (!state) {
+                    await sendLineMessage(replyToken, "👋 您好！請點擊下方的圖文選單來開始遊戲或查看題庫！");
                 }
             }
         }
