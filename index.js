@@ -35,68 +35,78 @@ async function sendLineMessage(replyToken, messageContent) {
         },
         body: JSON.stringify({
             replyToken: replyToken,
-            messages: messagesArray.slice(0, 5) // LINE 限制一次回覆最多 5 則訊息
+            messages: messagesArray.slice(0, 5)
         })
     });
 }
 
-// 🌟 動態產生測驗 Flex Message 卡片
+// 🌟 優化版：動態產生測驗 Flex Message (支援長文字換行)
 function createQuestionFlex(stage, qData) {
     const stageLabel = stageMap[stage];
+    
+    // 輔助函式：產生垂直排列的選項按鈕
+    const createOptionItem = (letter, text) => ({
+        type: "box",
+        layout: "vertical",
+        contents: [
+            {
+                type: "text",
+                text: `${letter.toUpperCase()}. ${text}`,
+                wrap: true, // 核心設定：允許長文字自動換行
+                size: "md",
+                color: "#333333"
+            }
+        ],
+        paddingAll: "lg",
+        backgroundColor: "#F0F0F0",
+        cornerRadius: "md",
+        margin: "md",
+        action: {
+            type: "message",
+            label: text,
+            text: letter // 按下後送出 a, b, c, d
+        }
+    });
+
     return {
         type: "flex",
         altText: `【第 ${stage} 幕】測驗題目`,
         contents: {
-            "type": "bubble",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
+            type: "bubble",
+            body: {
+                type: "box",
+                layout: "vertical",
+                contents: [
                     {
-                        "type": "text",
-                        "text": `【第 ${stage} 幕 - ${stageLabel} 區】測驗題目`,
-                        "weight": "bold",
-                        "color": "#1DB446",
-                        "size": "sm"
+                        type: "text",
+                        text: `【第 ${stage} 幕 - ${stageLabel} 區】測驗題目`,
+                        weight: "bold",
+                        color: "#1DB446",
+                        size: "sm"
                     },
                     {
-                        "type": "text",
-                        "text": qData.question,
-                        "weight": "bold",
-                        "size": "xl",
-                        "margin": "md",
-                        "wrap": true
+                        type: "text",
+                        text: qData.question,
+                        weight: "bold",
+                        size: "xl",
+                        margin: "md",
+                        wrap: true
                     },
-                    { "type": "separator", "margin": "xxl" },
+                    { type: "separator", margin: "xxl" },
                     {
-                        "type": "box",
-                        "layout": "vertical",
-                        "margin": "xxl",
-                        "spacing": "sm",
-                        "contents": [
-                            {
-                                "type": "box",
-                                "layout": "horizontal",
-                                "spacing": "sm",
-                                "contents": [
-                                    { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "message", "label": `A. ${qData.options.a}`, "text": "a" }, "color": "#F0F0F0" },
-                                    { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "message", "label": `B. ${qData.options.b}`, "text": "b" }, "color": "#F0F0F0" }
-                                ]
-                            },
-                            {
-                                "type": "box",
-                                "layout": "horizontal",
-                                "spacing": "sm",
-                                "contents": [
-                                    { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "message", "label": `C. ${qData.options.c}`, "text": "c" }, "color": "#F0F0F0" },
-                                    { "type": "button", "style": "secondary", "height": "sm", "action": { "type": "message", "label": `D. ${qData.options.d}`, "text": "d" }, "color": "#F0F0F0" }
-                                ]
-                            }
+                        type: "box",
+                        layout: "vertical", // 改為垂直排列
+                        margin: "xxl",
+                        spacing: "sm",
+                        contents: [
+                            createOptionItem("a", qData.options.a),
+                            createOptionItem("b", qData.options.b),
+                            createOptionItem("c", qData.options.c),
+                            createOptionItem("d", qData.options.d)
                         ]
                     }
                 ]
-            },
-            "styles": { "footer": { "separator": true } }
+            }
         }
     };
 }
@@ -113,12 +123,10 @@ app.get('/setup-menu', async (req, res) => {
             chatBarText: "點我查看功能",
             areas: [
                 {
-                    // 右上半部：遊戲開始
                     bounds: { x: 600, y: 0, width: 600, height: 405 },
                     action: { type: "message", text: "遊戲開始" }
                 },
                 {
-                    // 右下半部：查看題庫
                     bounds: { x: 600, y: 405, width: 600, height: 405 },
                     action: { type: "message", text: "查看題庫" }
                 }
@@ -135,7 +143,6 @@ app.get('/setup-menu', async (req, res) => {
         
         if (!richMenuId) return res.send(`❌ 建立選單失敗：${JSON.stringify(data)}`);
 
-        // 上傳 menu.jpg (請確保圖片尺寸為 1200x810)
         const imageBuffer = fs.readFileSync('./menu.jpg');
         await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, {
             method: 'POST',
@@ -143,7 +150,6 @@ app.get('/setup-menu', async (req, res) => {
             body: imageBuffer
         });
 
-        // 設為所有人的預設選單
         await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${richMenuId}`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
@@ -186,7 +192,7 @@ app.post('/webhook', async (req, res) => {
                 continue;
             }
 
-            // 2. 🌟 功能：查看題庫 (一次發送所有區域題目與答案)
+            // 2. 功能：查看題庫
             if (userMessage === '查看題庫') {
                 const messages = [];
                 const zones = ["A", "B", "C", "D", "E"];
@@ -213,7 +219,7 @@ app.post('/webhook', async (req, res) => {
                     state.stage++;
                     if (state.stage > 5) {
                         delete userStates[userId];
-                        await sendLineMessage(replyToken, "🎊 恭喜！您已通過全五幕測驗，成為專業達人！\n\n點選選單「遊戲開始」可再次挑戰。");
+                        await sendLineMessage(replyToken, "🎊 恭喜！您已通過全五幕測驗！\n\n點選選單「遊戲開始」可再次挑戰。");
                     } else {
                         state.wrongCount = 0;
                         state.questionIndex = 0;
@@ -229,7 +235,7 @@ app.post('/webhook', async (req, res) => {
                     state.wrongCount++;
                     if (state.wrongCount >= 3) {
                         delete userStates[userId];
-                        await sendLineMessage(replyToken, "💀 挑戰失敗！本幕三題全錯，已退回起點。\n\n點選「遊戲開始」重新挑戰！");
+                        await sendLineMessage(replyToken, "💀 挑戰失敗！本幕已錯三題，請回起點重新挑戰。");
                     } else {
                         state.questionIndex++;
                         const nextQ = state.currentPool[state.questionIndex];
