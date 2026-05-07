@@ -5,33 +5,32 @@ app.use(express.json());
 
 // 🔴 請填入您的 Channel Access Token
 const CHANNEL_ACCESS_TOKEN = 'Z1XcJNaA9vsbgUGPw3fFBRENS220e9oJjOzbIiWzxj7WC5EgPh5XPWOGW5ZiII6fz/F03f87r82nNeluYXqggr4E5ll6NIUbKFDPH8vovltUczcWvi0vQNvatLLnklBqRpCyKu4xrtyial2LbCWnhgdB04t89/1O/w1cDnyilFU=';
-const BASE_URL = 'https://my-line-bot-4lar.onrender.com';
+const BASE_URL = 'https://my-line-bot-4lar.onrender.com'; 
 
-// 🌟 安全讀取題庫 (避免因檔案缺失導致崩潰)
+// 安全讀取題庫
 let questionsData = {};
-try {
-    if (fs.existsSync('./questions.json')) {
-        questionsData = JSON.parse(fs.readFileSync('./questions.json', 'utf-8'));
-        console.log("✅ 題庫載入成功");
-    } else {
-        console.error("❌ 找不到 questions.json 檔案");
+function loadQuestions() {
+    try {
+        if (fs.existsSync('./questions.json')) {
+            const raw = fs.readFileSync('./questions.json', 'utf-8');
+            questionsData = JSON.parse(raw);
+            console.log("✅ 題庫載入成功");
+        }
+    } catch (e) {
+        console.error("❌ 題庫格式錯誤:", e.message);
     }
-} catch (e) {
-    console.error("❌ 題庫格式錯誤:", e.message);
 }
+loadQuestions();
 
-// 儲存玩家狀態
 const userStates = {};
 const stageMap = { 1: "1", 2: "2", 3: "3" };
 
-// 隨機抽題函式
 function getRandomItems(array, n) {
-    if (!array || array.length === 0) return [];
+    if (!Array.isArray(array) || array.length === 0) return [];
     const shuffled = [...array].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, n);
 }
 
-// 發送 LINE 訊息
 async function sendLineMessage(replyToken, messageContent) {
     const messagesArray = Array.isArray(messageContent) ? messageContent : [{ type: 'text', text: messageContent }];
     try {
@@ -78,21 +77,32 @@ function createQuestionFlex(stage, qData, qIndex, correct, wrong) {
     };
 }
 
+// 提供失敗圖片的存取路徑
+app.get('/failure.jpg', (req, res) => {
+    if (fs.existsSync('./failure.jpg')) {
+        res.sendFile(__dirname + '/failure.jpg');
+    } else {
+        res.status(404).send('Not Found');
+    }
+});
+
 // 題庫瀏覽網頁
 app.get('/view-questions', (req, res) => {
+    loadQuestions();
     if (!questionsData["1"]) return res.send("<h1>題庫尚未就緒</h1>");
     let html = `<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>題庫</title><style>body{font-family:sans-serif;padding:20px;background:#f4f4f9;} .q-card{background:white;padding:15px;margin:10px 0;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}</style></head><body><h1>📚 題庫檢覽</h1>`;
     ["1", "2", "3"].forEach(stage => {
-        html += `<h2>第 ${stage} 幕</h2>`;
-        questionsData[stage].forEach((q, i) => {
-            html += `<div class="q-card"><strong>Q${i + 1}: ${q.question}</strong><br><small>A:${q.options.a} B:${q.options.b} C:${q.options.c}</small><br><span style="color:red">答案:${q.answer.toUpperCase()}</span></div>`;
-        });
+        if(questionsData[stage]) {
+            html += `<h2>第 ${stage} 幕</h2>`;
+            questionsData[stage].forEach((q, i) => {
+                html += `<div class="q-card"><strong>Q${i+1}: ${q.question}</strong><br><small>A:${q.options.a} B:${q.options.b} C:${q.options.c}</small><br><span style="color:red">答案:${q.answer.toUpperCase()}</span></div>`;
+            });
+        }
     });
     html += `</body></html>`;
     res.send(html);
 });
 
-// Webhook
 app.post('/webhook', async (req, res) => {
     const events = req.body.events;
     if (!events) return res.status(200).send('OK');
@@ -104,20 +114,16 @@ app.post('/webhook', async (req, res) => {
 
             if (userMessage === '遊戲開始') {
                 const selected = getRandomItems(questionsData["1"], 5);
-                if (selected.length === 0) return await sendLineMessage(replyToken, "系統尚未載入題庫，請檢查檔案。");
+                if (selected.length === 0) return await sendLineMessage(replyToken, "❌ 題庫載入失敗。");
                 userStates[userId] = { stage: 1, correctCount: 0, wrongCount: 0, questionIndex: 0, currentPool: selected };
                 await sendLineMessage(replyToken, [{ type: 'text', text: '🎮 挑戰開始！每幕隨機抽 5 題，答對 3 題晉級！' }, createQuestionFlex(1, selected[0], 0, 0, 0)]);
             } else if (userMessage === '查看題庫') {
                 await sendLineMessage(replyToken, [{
                     type: "flex", altText: "查看題庫",
-                    contents: {
-                        type: "bubble", body: {
-                            type: "box", layout: "vertical", contents: [
-                                { type: "text", text: "📚 完整題庫網頁", weight: "bold", size: "lg" },
-                                { type: "button", style: "primary", color: "#1DB446", margin: "xl", action: { type: "uri", label: "開啟網頁", uri: `${BASE_URL}/view-questions` } }
-                            ]
-                        }
-                    }
+                    contents: { type: "bubble", body: { type: "box", layout: "vertical", contents: [
+                        { type: "text", text: "📚 完整題庫網頁", weight: "bold", size: "lg" },
+                        { type: "button", style: "primary", color: "#1DB446", margin: "xl", action: { type: "uri", label: "開啟網頁", uri: `${BASE_URL}/view-questions` }}
+                    ]}}
                 }]);
             } else {
                 const state = userStates[userId];
@@ -125,9 +131,18 @@ app.post('/webhook', async (req, res) => {
                     const currentQ = state.currentPool[state.questionIndex];
                     const isCorrect = userMessage === currentQ.answer;
                     if (isCorrect) state.correctCount++; else state.wrongCount++;
+                    
+                    // 🌟 失敗邏輯：答錯 3 題時
                     if (state.wrongCount >= 3) {
                         delete userStates[userId];
-                        await sendLineMessage(replyToken, `💀 挑戰失敗！本幕已錯 3 題。`);
+                        await sendLineMessage(replyToken, [
+                            { type: 'text', text: `💀 挑戰失敗！你在本幕已經答錯 3 題了，被傳送回原點。` },
+                            {
+                                type: 'image',
+                                originalContentUrl: `${BASE_URL}/failure.jpg`, // 讀取你專案內的 failure.jpg
+                                previewImageUrl: `${BASE_URL}/failure.jpg`
+                            }
+                        ]);
                     } else {
                         state.questionIndex++;
                         if (state.questionIndex >= 5) {
@@ -142,8 +157,16 @@ app.post('/webhook', async (req, res) => {
                                     await sendLineMessage(replyToken, [{ type: 'text', text: `✅ 晉級第 ${state.stage} 幕！` }, createQuestionFlex(state.stage, state.currentPool[0], 0, 0, 0)]);
                                 }
                             } else {
+                                // 🌟 失敗邏輯：五題結束但答對不足 3 題
                                 delete userStates[userId];
-                                await sendLineMessage(replyToken, `💔 可惜！答對僅 ${state.correctCount} 題，挑戰結束。`);
+                                await sendLineMessage(replyToken, [
+                                    { type: 'text', text: `💔 可惜！答對僅 ${state.correctCount} 題，未達門檻。` },
+                                    {
+                                        type: 'image',
+                                        originalContentUrl: `${BASE_URL}/failure.jpg`,
+                                        previewImageUrl: `${BASE_URL}/failure.jpg`
+                                    }
+                                ]);
                             }
                         } else {
                             await sendLineMessage(replyToken, [{ type: 'text', text: isCorrect ? "✅ 正確！" : "❌ 答錯了！" }, createQuestionFlex(state.stage, state.currentPool[state.questionIndex], state.questionIndex, state.correctCount, state.wrongCount)]);
@@ -159,18 +182,16 @@ app.post('/webhook', async (req, res) => {
 // 圖文選單 Setup
 app.get('/setup-menu', async (req, res) => {
     try {
-        if (!fs.existsSync('./menu.jpg')) return res.send("<h1>❌ 失敗</h1><p>找不到 menu.jpg，請先上傳圖片到 GitHub。</p>");
-        const menuConfig = {
-            size: { width: 1200, height: 810 }, selected: true, name: "Menu", chatBarText: "選單", areas: [
-                { bounds: { x: 600, y: 0, width: 600, height: 405 }, action: { type: "message", text: "遊戲開始" } },
-                { bounds: { x: 600, y: 405, width: 600, height: 405 }, action: { type: "message", text: "查看題庫" } }
-            ]
-        };
-        const r1 = await fetch('https://api.line.me/v2/bot/richmenu', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }, body: JSON.stringify(menuConfig) });
+        if (!fs.existsSync('./menu.jpg')) return res.send("<h1>❌ 找不到 menu.jpg</h1>");
+        const menuConfig = { size: { width: 1200, height: 810 }, selected: true, name: "Menu", chatBarText: "選單", areas: [
+            { bounds: { x: 600, y: 0, width: 600, height: 405 }, action: { type: "message", text: "遊戲開始" } },
+            { bounds: { x: 600, y: 405, width: 600, height: 405 }, action: { type: "message", text: "查看題庫" } }
+        ]};
+        const r1 = await fetch('https://api.line.me/v2/bot/richmenu', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }, body: JSON.stringify(menuConfig)});
         const { richMenuId } = await r1.json();
-        await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }, body: fs.readFileSync('./menu.jpg') });
-        await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${richMenuId}`, { method: 'POST', headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` } });
-        res.send(`<h1>✅ 成功</h1><p>ID: ${richMenuId}</p>`);
+        await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }, body: fs.readFileSync('./menu.jpg')});
+        await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${richMenuId}`, { method: 'POST', headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }});
+        res.send(`<h1>✅ 選單成功</h1>`);
     } catch (e) { res.send(`<h1>❌ 錯誤</h1><p>${e.message}</p>`); }
 });
 
