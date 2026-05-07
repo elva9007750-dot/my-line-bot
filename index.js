@@ -4,7 +4,7 @@ const app = express();
 app.use(express.json());
 
 // 🔴 請填入您的 Channel Access Token
-const CHANNEL_ACCESS_TOKEN = '您的_CHANNEL_ACCESS_TOKEN_請填這裡';
+const CHANNEL_ACCESS_TOKEN = 'Z1XcJNaA9vsbgUGPw3fFBRENS220e9oJjOzbIiWzxj7WC5EgPh5XPWOGW5ZiII6fz/F03f87r82nNeluYXqggr4E5ll6NIUbKFDPH8vovltUczcWvi0vQNvatLLnklBqRpCyKu4xrtyial2LbCWnhgdB04t89/1O/w1cDnyilFU=';
 const BASE_URL = 'https://my-line-bot-4lar.onrender.com';
 
 // 🌟 安全讀取題庫 (避免因檔案缺失導致崩潰)
