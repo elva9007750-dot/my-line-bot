@@ -5,7 +5,7 @@ const app = express();
 app.use(express.json());
 
 // 🔴 請在這裡填寫你剛剛提供的 Channel Access Token
-const CHANNEL_ACCESS_TOKEN = '請將這段文字替換成你的_Token';
+const CHANNEL_ACCESS_TOKEN = 'Z1XcJNaA9vsbgUGPw3fFBRENS220e9oJjOzbIiWzxj7WC5EgPh5XPWOGW5ZiII6fz/F03f87r82nNeluYXqggr4E5ll6NIUbKFDPH8vovltUczcWvi0vQNvatLLnklBqRpCyKu4xrtyial2LbCWnhgdB04t89/1O/w1cDnyilFU=';
 
 // 建立一個接收 LINE 訊息的入口 (Webhook)
 app.post('/webhook', async (req, res) => {
